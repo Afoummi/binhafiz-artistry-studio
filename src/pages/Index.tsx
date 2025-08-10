@@ -21,7 +21,7 @@ const Index = () => {
           <div className="container grid md:grid-cols-2 gap-10 items-center">
             <div>
               <h2 className="font-display text-3xl md:text-4xl font-bold">About</h2>
-              <p className="mt-3 text-muted-foreground">I’m Bin Hafiz — a multidisciplinary graphic designer focused on building brands with clarity and character. My approach blends strategic thinking with expressive visuals to deliver work that resonates and performs.</p>
+              <p className="mt-3 text-muted-foreground">I’m Muhammad Bashir Hafizu — a multidisciplinary graphic designer focused on building brands with clarity and character. My approach blends strategic thinking with expressive visuals to deliver work that resonates and performs.</p>
             </div>
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li>• 5+ years in branding and identity systems</li>
