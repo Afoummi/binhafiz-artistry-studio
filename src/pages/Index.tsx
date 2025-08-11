@@ -10,6 +10,16 @@ import { useEffect } from "react";
 const Index = () => {
   useEffect(() => {
     document.title = "Bin Hafiz Graphics | Graphic Design Studio";
+
+    // Ensure absolute canonical URL
+    const canonicalHref = window.location.origin + window.location.pathname;
+    let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.setAttribute('rel', 'canonical');
+      document.head.appendChild(link);
+    }
+    link.setAttribute('href', canonicalHref);
   }, []);
 
   return (
@@ -53,6 +63,33 @@ const Index = () => {
               "@type": "Brand",
               name: "Bin Hafiz Graphics"
             }
+          }),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: [
+              {
+                "@type": "Question",
+                name: "What services do you offer?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Brand identity, logo design, print assets, and digital visual design."
+                }
+              },
+              {
+                "@type": "Question",
+                name: "How soon can we start?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "I typically respond within 24 hours and can start within 1–2 weeks depending on availability."
+                }
+              }
+            ]
           }),
         }}
       />
