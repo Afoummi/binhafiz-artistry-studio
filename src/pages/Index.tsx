@@ -3,6 +3,7 @@ import Hero from "@/components/site/Hero";
 import Services from "@/components/site/Services";
 import Portfolio from "@/components/site/Portfolio";
 import Testimonials from "@/components/site/Testimonials";
+import ContactForm from "@/components/site/ContactForm";
 import ContactCTA from "@/components/site/ContactCTA";
 import Footer from "@/components/site/Footer";
 import { useEffect } from "react";
@@ -43,6 +44,7 @@ const Index = () => {
         <Services />
         <Portfolio />
         <Testimonials />
+        <ContactForm />
         <ContactCTA />
       </main>
       <Footer />
