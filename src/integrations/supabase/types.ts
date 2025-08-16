@@ -74,6 +74,80 @@ export type Database = {
         }
         Relationships: []
       }
+      project_images: {
+        Row: {
+          alt: string | null
+          created_at: string
+          id: string
+          path: string
+          position: number
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          path: string
+          position?: number
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          path?: string
+          position?: number
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_images_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          github_url: string | null
+          id: string
+          is_published: boolean
+          live_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          github_url?: string | null
+          id?: string
+          is_published?: boolean
+          live_url?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          github_url?: string | null
+          id?: string
+          is_published?: boolean
+          live_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
