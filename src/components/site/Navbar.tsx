@@ -35,6 +35,9 @@ export const Navbar = () => {
               {link.label}
             </a>
           ))}
+          <a href="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Login
+          </a>
           <Button asChild variant="hero" size="sm">
             <a href="#contact">Hire Me</a>
           </Button>
@@ -62,6 +65,9 @@ export const Navbar = () => {
                 {link.label}
               </a>
             ))}
+            <a href="/auth" onClick={() => setOpen(false)} className="py-1 text-muted-foreground hover:text-foreground transition-colors">
+              Login
+            </a>
             <Button asChild variant="hero">
               <a href="#contact" onClick={() => setOpen(false)}>Hire Me</a>
             </Button>

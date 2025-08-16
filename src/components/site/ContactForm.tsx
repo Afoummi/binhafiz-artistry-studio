@@ -46,7 +46,8 @@ const ContactForm = () => {
     setIsSubmitting(true);
     
     try {
-      const { error } = await supabase
+      const clientAny = supabase as any;
+      const { error } = await clientAny
         .from('contact_submissions')
         .insert([{
           name: data.name,
