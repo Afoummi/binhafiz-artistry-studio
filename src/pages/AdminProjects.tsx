@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,181 +6,361 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
+import { Trash2, Upload, LogOut, Eye, EyeOff } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+
+type Project = {
+  id: string;
+  title: string;
+  description: string;
+  github_url: string;
+  live_url: string;
+  is_published: boolean;
+  created_at: string;
+};
+
+type ProjectImage = {
+  id: string;
+  project_id: string;
+  path: string;
+  alt: string;
+  position: number;
+};
 
 const AdminProjects = () => {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [githubUrl, setGithubUrl] = useState("");
-  const [liveUrl, setLiveUrl] = useState("");
-  const [isPublished, setIsPublished] = useState(false);
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectImages, setProjectImages] = useState<ProjectImage[]>([]);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    github_url: "",
+    live_url: "",
+    is_published: false,
+  });
+  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    document.title = "Add Project | Bin Hafiz Graphics";
+    document.title = "Admin Projects | Bin Hafiz Graphics";
     const canonical = document.querySelector("link[rel='canonical']") || document.createElement("link");
     canonical.setAttribute("rel", "canonical");
     canonical.setAttribute("href", `${window.location.origin}/admin/projects`);
     document.head.appendChild(canonical);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSessionUserId(session?.user?.id ?? null);
       if (!session?.user) {
         navigate("/auth", { replace: true });
+      } else {
+        setUser(session.user);
       }
     });
 
     supabase.auth.getSession().then(({ data }) => {
-      const uid = data.session?.user?.id ?? null;
-      setSessionUserId(uid);
-      if (!uid) navigate("/auth", { replace: true });
+      if (!data.session?.user) {
+        navigate("/auth", { replace: true });
+      } else {
+        setUser(data.session.user);
+        loadProjects();
+      }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const canSubmit = useMemo(() => {
-    return !!sessionUserId && !!title && files && files.length > 0;
-  }, [sessionUserId, title, files]);
+  const loadProjects = async () => {
+    setLoading(true);
+    try {
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFiles(e.target.files);
+      if (projectsError) throw projectsError;
+
+      const { data: imagesData, error: imagesError } = await supabase
+        .from("project_images")
+        .select("*")
+        .order("position");
+
+      if (imagesError) throw imagesError;
+
+      setProjects(projectsData || []);
+      setProjectImages(imagesData || []);
+    } catch (err: any) {
+      toast({ title: "Error loading projects", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setGithubUrl("");
-    setLiveUrl("");
-    setIsPublished(false);
-    setFiles(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sessionUserId || !files || files.length === 0) return;
-
+    if (!user) return;
+    
     setUploading(true);
     try {
-      // 1) Create project row
-      const { data: projectData, error: projectError } = await supabase
+      // Insert project
+      const { data: project, error: projectError } = await supabase
         .from("projects")
-        .insert([
-          {
-            user_id: sessionUserId,
-            title,
-            description,
-            github_url: githubUrl || null,
-            live_url: liveUrl || null,
-            is_published: isPublished,
-          },
-        ])
-        .select("id")
-        .maybeSingle();
+        .insert([{ ...formData, user_id: user.id }])
+        .select()
+        .single();
 
-      if (projectError || !projectData) throw projectError || new Error("Failed to create project");
+      if (projectError) throw projectError;
 
-      const projectId = projectData.id as string;
+      // Upload images if any
+      if (selectedFiles && selectedFiles.length > 0) {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${user.id}/${project.id}-${i}.${fileExt}`;
 
-      // 2) Upload files and insert image rows
-      const uploads = Array.from(files).map(async (file, idx) => {
-        const ext = file.name.split(".").pop();
-        const path = `${sessionUserId}/${projectId}/${Date.now()}-${idx}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from("portfolio")
+            .upload(fileName, file);
 
-        const { error: uploadError } = await supabase.storage
-          .from("portfolio")
-          .upload(path, file, { upsert: false });
-        if (uploadError) throw uploadError;
+          if (uploadError) throw uploadError;
 
-        const { data: pub } = supabase.storage.from("portfolio").getPublicUrl(path);
+          // Insert image record
+          const { error: imageError } = await supabase
+            .from("project_images")
+            .insert([{
+              project_id: project.id,
+              user_id: user.id,
+              path: fileName,
+              alt: `${formData.title} image ${i + 1}`,
+              position: i,
+            }]);
 
-        const { error: imgError } = await supabase
-          .from("project_images")
-          .insert([
-            {
-              project_id: projectId,
-              user_id: sessionUserId,
-              path,
-              alt: `${title} image ${idx + 1}`,
-              position: idx,
-            },
-          ]);
-        if (imgError) throw imgError;
+          if (imageError) throw imageError;
+        }
+      }
 
-        return pub.publicUrl;
-      });
-
-      await Promise.all(uploads);
-
-      toast({ title: "Project created", description: "Your project and images were uploaded." });
-      resetForm();
+      toast({ title: "Success", description: "Project uploaded successfully!" });
+      setFormData({ title: "", description: "", github_url: "", live_url: "", is_published: false });
+      setSelectedFiles(null);
+      loadProjects();
     } catch (err: any) {
-      console.error(err);
-      toast({ title: "Error", description: err.message || "Could not create project", variant: "destructive" });
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
       setUploading(false);
     }
   };
 
+  const togglePublished = async (projectId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({ is_published: !currentStatus })
+        .eq("id", projectId);
+
+      if (error) throw error;
+      toast({ title: "Updated", description: `Project ${!currentStatus ? "published" : "unpublished"}` });
+      loadProjects();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const deleteProject = async (projectId: string) => {
+    if (!confirm("Delete this project? This cannot be undone.")) return;
+
+    try {
+      // Delete associated images from storage
+      const imagesToDelete = projectImages.filter(img => img.project_id === projectId);
+      for (const image of imagesToDelete) {
+        await supabase.storage.from("portfolio").remove([image.path]);
+      }
+
+      // Delete project (cascade will handle project_images)
+      const { error } = await supabase.from("projects").delete().eq("id", projectId);
+      if (error) throw error;
+
+      toast({ title: "Deleted", description: "Project deleted successfully." });
+      loadProjects();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const getImageUrl = (path: string) => {
+    const { data } = supabase.storage.from("portfolio").getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  if (loading) return <div className="container py-16">Loading...</div>;
+
   return (
-    <main className="container py-16">
-      <section className="mx-auto max-w-2xl">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Add Project</CardTitle>
-            <CardDescription>Upload a new project with multiple images.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreate} className="space-y-6" aria-label="Create project form">
+    <main className="container py-8">
+      <header className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Project Management</h1>
+          <p className="text-muted-foreground">Upload and manage your portfolio projects</p>
+        </div>
+        <Button onClick={handleLogout} variant="outline" size="sm">
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
+      </header>
+
+      {/* Upload Form */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Add New Project</CardTitle>
+          <CardDescription>Upload a new project with images</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="title">Title *</Label>
-                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+                <Label htmlFor="title">Project Title</Label>
+                <Input
+                  id="title"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="My Awesome Project"
+                />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+                <Label htmlFor="github_url">GitHub URL (optional)</Label>
+                <Input
+                  id="github_url"
+                  type="url"
+                  value={formData.github_url}
+                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
+                  placeholder="https://github.com/..."
+                />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                required
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Brief description of your project..."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="live_url">Live URL (optional)</Label>
+              <Input
+                id="live_url"
+                type="url"
+                value={formData.live_url}
+                onChange={(e) => setFormData({ ...formData, live_url: e.target.value })}
+                placeholder="https://myproject.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="images">Project Images</Label>
+              <Input
+                id="images"
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={(e) => setSelectedFiles(e.target.files)}
+              />
+              <p className="text-sm text-muted-foreground">Select multiple images to showcase your project</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="published"
+                checked={formData.is_published}
+                onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
+              />
+              <Label htmlFor="published">Publish immediately</Label>
+            </div>
+            <Button type="submit" disabled={uploading}>
+              {uploading ? "Uploading..." : <><Upload className="w-4 h-4 mr-2" />Upload Project</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="github">GitHub URL</Label>
-                  <Input id="github" value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} placeholder="https://github.com/..." />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="live">Live URL</Label>
-                  <Input id="live" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} placeholder="https://..." />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border border-border rounded-md p-3">
-                <div className="space-y-1">
-                  <Label htmlFor="publish">Publish immediately</Label>
-                  <p className="text-xs text-muted-foreground">If enabled, this project becomes visible on your site.</p>
-                </div>
-                <Switch id="publish" checked={isPublished} onCheckedChange={setIsPublished} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="files">Images *</Label>
-                <Input id="files" ref={fileInputRef} type="file" accept="image/*" multiple onChange={onFileChange} />
-                <p className="text-xs text-muted-foreground">Upload multiple images. They will be stored securely.</p>
-              </div>
-
-              <Button type="submit" className="w-full" disabled={!canSubmit || uploading}>
-                {uploading ? "Uploading..." : "Create Project"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </section>
+      {/* Projects List */}
+      <div className="space-y-6">
+        <h2 className="text-2xl font-semibold">Your Projects ({projects.length})</h2>
+        {projects.length === 0 ? (
+          <p className="text-muted-foreground">No projects yet. Upload your first project above!</p>
+        ) : (
+          projects.map((project) => {
+            const images = projectImages.filter(img => img.project_id === project.id);
+            return (
+              <Card key={project.id}>
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-xl font-semibold">{project.title}</h3>
+                      <p className="text-muted-foreground">{project.description}</p>
+                      <div className="flex gap-4 mt-2 text-sm">
+                        {project.github_url && (
+                          <a href={project.github_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            GitHub
+                          </a>
+                        )}
+                        {project.live_url && (
+                          <a href={project.live_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            Live Site
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => togglePublished(project.id, project.is_published)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {project.is_published ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
+                      <Button
+                        onClick={() => deleteProject(project.id)}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  {images.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {images.map((image) => (
+                        <img
+                          key={image.id}
+                          src={getImageUrl(image.path)}
+                          alt={image.alt}
+                          className="aspect-square object-cover rounded-lg border"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Status: <span className={project.is_published ? "text-green-600" : "text-yellow-600"}>
+                      {project.is_published ? "Published" : "Draft"}
+                    </span>
+                    {" • "}
+                    Created: {new Date(project.created_at).toLocaleDateString()}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
     </main>
   );
 };
